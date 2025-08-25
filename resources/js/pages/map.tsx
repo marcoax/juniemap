@@ -163,7 +163,7 @@ function TopBar(props: {
         className="w-full sm:max-w-[480px] flex-1 min-w-0 rounded border px-3 py-2 text-sm outline-none focus:ring-2"
         style={{ borderColor: '#e5e7eb', boxShadow: '0 0 0 0 rgba(0,0,0,0)' }}
       />
-      <select value={props.stato} onChange={(e) => props.setStato(e.target.value as any)} className="w-full sm:w-auto rounded border px-2 py-2 text-sm">
+      <select value={props.stato} onChange={(e) => props.setStato(e.target.value as any)} className="w-full sm:w-auto rounded border px-2 py-2 text-sm stato-select">
         <option value="tutti">Tutti gli stati</option>
         <option value="attivo">attivo</option>
         <option value="disattivo">disattivo</option>

@@ -138,4 +138,11 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    /* Ensure select options inherit the font size so Tailwind text-* classes apply consistently */
+    .stato-select,
+    .stato-select option {
+        font-size: 0.875rem; /* Tailwind text-sm */
+        line-height: 1.25rem;
+    }
 }
