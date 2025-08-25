@@ -1,15 +1,21 @@
 <?php
 
+use App\Http\Controllers\LocationController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('welcome');
-})->name('home');
+Route::get('/', [LocationController::class, 'index'])->name('home');
+
+// Public API endpoints for locations
+Route::prefix('locations')->group(function (): void {
+    Route::get('/', [LocationController::class, 'index'])->name('locations.index');
+    Route::get('/search', [LocationController::class, 'search'])->middleware('throttle:60,1')->name('locations.search');
+    Route::get('/{id}', [LocationController::class, 'show'])->middleware('throttle:60,1')->name('locations.show');
+    Route::get('/{id}/details', [LocationController::class, 'details'])->middleware('throttle:60,1')->name('locations.details');
+});
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
+        return \Inertia\Inertia::render('dashboard');
     })->name('dashboard');
 });
 
