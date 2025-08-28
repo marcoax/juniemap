@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Locations\LocationSearchRequest;
 use App\Models\Location;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,16 +36,11 @@ class LocationController extends Controller
         ]);
     }
 
-    public function search(Request $request): JsonResource
+    public function search(LocationSearchRequest $request): JsonResource
     {
-        $this->throttle($request);
+        $validated = $request->validated();
 
-        $validated = $request->validate([
-            'search' => ['nullable', 'string', 'max:255'],
-            'stato' => ['nullable', 'in:attivo,disattivo,in_allarme'],
-        ]);
-
-        $search = $this->sanitize($validated['search'] ?? null);
+        $search = $validated['search'] ?? null;
         $stato = $validated['stato'] ?? null;
 
         $cacheKey = 'locations.search:'.md5(($search ?? '').'|'.($stato ?? ''));
@@ -77,18 +72,6 @@ class LocationController extends Controller
         });
 
         return JsonResource::make($location);
-    }
-
-    protected function throttle(Request $request): void
-    {
-        $key = 'locations-search:'.$request->ip();
-        $allowed = RateLimiter::attempt($key, 60, function (): void {
-            // allowed
-        });
-
-        if ($allowed === false) {
-            abort(429, 'Too Many Requests');
-        }
     }
 
     protected function sanitize(?string $value): ?string
