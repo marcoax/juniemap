@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'google' => [
+        // Prefer server-side GOOGLE_MAPS_API_KEY, fallback to VITE_* for backward compatibility
+        'maps_key' => env('GOOGLE_MAPS_API_KEY', env('VITE_GOOGLE_MAPS_API_KEY')),
+    ],
+
 ];
