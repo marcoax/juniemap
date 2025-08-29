@@ -45,8 +45,14 @@ A Laravel 12 + Inertia v2 + React 19 + Tailwind CSS v4 application. Juniemap dis
 - If using database sessions/queues (default), ensure tables are created:
   - Sessions table is included in migrations
   - Queues table is included in migrations
+5) Seed the database
+- Run seeders to populate demo data (optional):
+    - php artisan migrate --seed --no-interaction
+    - Or, if already migrated: php artisan db:seed --no-interaction
+    - To run a specific seeder: php artisan db:seed --class=YourSeeder --no-interaction
+    - Caution: To rebuild from scratch: php artisan migrate:fresh --seed --no-interaction
 
-5) Development servers
+6) Development servers
 - Backend: `php artisan serve`
 - Frontend: `npm run dev`
 
