@@ -1,9 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Requests\Locations;
 
+use App\DataTransferObjects\LocationSearchDto;
+use App\Enums\LocationStato;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class LocationSearchRequest extends FormRequest
 {
@@ -35,8 +40,8 @@ class LocationSearchRequest extends FormRequest
         }
 
         $this->merge([
-            'search' => $search,
-            'stato' => $stato,
+            'search' => $search ?: null,
+            'stato' => $stato ?: null,
         ]);
     }
 
@@ -48,8 +53,30 @@ class LocationSearchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'search' => ['nullable', 'string', 'max:255'],
-            'stato' => ['nullable', 'in:attivo,disattivo,in_allarme'],
+            'search' => ['nullable', 'string', 'max:255', 'min:1'],
+            'stato' => ['nullable', Rule::enum(LocationStato::class)],
         ];
+    }
+
+    /**
+     * Get custom validation messages.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'search.min' => 'Il termine di ricerca deve contenere almeno 1 carattere.',
+            'search.max' => 'Il termine di ricerca non può superare i 255 caratteri.',
+            'stato.enum' => 'Lo stato selezionato non è valido.',
+        ];
+    }
+
+    /**
+     * Convert validated data to DTO.
+     */
+    public function toDto(): LocationSearchDto
+    {
+        return LocationSearchDto::fromArray($this->validated());
     }
 }

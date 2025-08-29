@@ -1,85 +1,71 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
+use App\DataTransferObjects\LocationSearchDto;
+use App\Exceptions\LocationNotFoundException;
 use App\Http\Requests\Locations\LocationSearchRequest;
-use App\Models\Location;
-use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use App\Http\Resources\LocationListResource;
+use App\Http\Resources\LocationResource;
+use App\Services\LocationService;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class LocationController extends Controller
+final class LocationController extends Controller
 {
-    public function __construct(public CacheRepository $cache) {}
+    public function __construct(
+        private readonly LocationService $locationService,
+    ) {}
 
     public function index(Request $request): Response
     {
-        $search = $this->sanitize($request->string('search')->toString());
-        $stato = $request->string('stato')->toString();
-
-        $locations = Location::query()
-            ->search($search)
-            ->byStato($stato)
-            ->orderBy('titolo')
-            ->get(['id', 'titolo', 'indirizzo', 'latitude', 'longitude', 'stato']);
+        $searchDto = LocationSearchDto::fromArray($request->all());
+        $locations = $this->locationService->search($searchDto);
 
         return Inertia::render('map', [
             'filters' => [
-                'search' => $search,
-                'stato' => $stato,
+                'search' => $searchDto->getSearchTerm(),
+                'stato' => $searchDto->getStatoValue(),
             ],
-            'locations' => $locations,
+            'locations' => LocationListResource::collection($locations)->toArray(request()),
             'googleMapsApiKey' => config('services.google.maps_key'),
             'googleMapsApiKeyMissing' => empty(config('services.google.maps_key')),
         ]);
     }
 
-    public function search(LocationSearchRequest $request): JsonResource
+    public function search(LocationSearchRequest $request): AnonymousResourceCollection
     {
-        $validated = $request->validated();
+        $searchDto = $request->toDto();
+        $locations = $this->locationService->search($searchDto);
 
-        $search = $validated['search'] ?? null;
-        $stato = $validated['stato'] ?? null;
-
-        $cacheKey = 'locations.search:'.md5(($search ?? '').'|'.($stato ?? ''));
-
-        $locations = $this->cache->remember($cacheKey, now()->addMinutes(15), function () use ($search, $stato) {
-            return Location::query()
-                ->search($search)
-                ->byStato($stato)
-                ->orderBy('titolo')
-                ->get(['id', 'titolo', 'indirizzo', 'latitude', 'longitude', 'stato']);
-        });
-
-        return JsonResource::collection($locations);
+        return LocationListResource::collection($locations);
     }
 
-    public function show(int $id): JsonResource
+    /**
+     * Get location details.
+     *
+     * @throws LocationNotFoundException
+     */
+    public function show(int $id): LocationResource
     {
-        $location = Location::query()->findOrFail($id);
+        $location = $this->locationService->getLocationDetails($id);
 
-        return JsonResource::make($location);
+        return LocationResource::make($location);
     }
 
-    public function details(int $id): JsonResource
+    /**
+     * Get detailed location information.
+     *
+     * @throws LocationNotFoundException
+     */
+    public function details(int $id): LocationResource
     {
-        $cacheKey = 'locations.details:'.$id;
+        $location = $this->locationService->getLocationDetails($id);
 
-        $location = $this->cache->remember($cacheKey, now()->addMinutes(15), function () use ($id) {
-            return Location::query()->findOrFail($id);
-        });
-
-        return JsonResource::make($location);
-    }
-
-    protected function sanitize(?string $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        return trim(strip_tags($value));
+        return LocationResource::make($location);
     }
 }

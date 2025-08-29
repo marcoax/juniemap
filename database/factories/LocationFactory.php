@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Factories;
 
+use App\Enums\LocationStato;
 use App\Models\Location;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -20,7 +23,7 @@ class LocationFactory extends Factory
             'indirizzo' => $this->faker->address(),
             'latitude' => $this->faker->latitude(36.6, 46.5),
             'longitude' => $this->faker->longitude(6.6, 18.5),
-            'stato' => $this->faker->randomElement(['attivo', 'disattivo', 'in_allarme']),
+            'stato' => $this->faker->randomElement(LocationStato::cases())->value,
             'orari_apertura' => '09:00 - 18:00',
             'prezzo_biglietto' => '€10',
             'sito_web' => $this->faker->url(),

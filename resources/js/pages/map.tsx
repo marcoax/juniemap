@@ -1,50 +1,37 @@
 import { Head, usePage } from '@inertiajs/react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { LocationBase, LocationFull, LocationSearchFilters, LocationStato } from '../types/location'
+import { useLocationSearch } from '../hooks/use-location-search'
+import { useLocationDetails } from '../hooks/use-location-details'
+import { getLocationColor, escapeHtml, escapeAttribute } from '../utils/location'
 
 const COLORS = {
   primary: '#2563EB',
   success: '#10B981',
   danger: '#EF4444',
   muted: '#9CA3AF',
-}
+} as const
 
-type LocationLite = {
-  id: number
-  titolo: string
-  indirizzo: string
-  latitude: number
-  longitude: number
-  stato: 'attivo' | 'disattivo' | 'in_allarme'
-}
-
-type LocationFull = LocationLite & {
-  descrizione?: string | null
-  orari_apertura?: string | null
-  prezzo_biglietto?: string | null
-  sito_web?: string | null
-  telefono?: string | null
-  note_visitatori?: string | null
-}
-
-type PageProps = {
-  filters: { search: string | null; stato: string | null }
-  locations: LocationLite[]
+interface PageProps {
+  filters: LocationSearchFilters
+  locations: LocationBase[]
   googleMapsApiKey?: string | null
   googleMapsApiKeyMissing?: boolean
 }
 
 export default function MapPage() {
   const { props } = usePage<PageProps>()
-  const initialLocations = props.locations ?? []
+  // Ensure initial locations is always an array
+  const safeInitialLocations = Array.isArray(props.locations) ? props.locations : []
 
-  const [locations, setLocations] = useState<LocationLite[]>(initialLocations)
-  const [selected, setSelected] = useState<LocationFull | null>(null)
   const [searchQuery, setSearchQuery] = useState<string>(props.filters?.search ?? '')
-  const [currentFilter, setCurrentFilter] = useState<'attivo' | 'disattivo' | 'in_allarme' | 'tutti'>(
-    (props.filters?.stato as any) || 'tutti',
+  const [currentFilter, setCurrentFilter] = useState<LocationStato | 'tutti'>(
+    (props.filters?.stato as LocationStato) || 'tutti',
   )
-  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false)
+  
+  const { locations, isLoading, error: searchError, searchLocations, clearError } = useLocationSearch(safeInitialLocations)
+  const { locationDetails: selected, fetchLocationDetails, clearDetails } = useLocationDetails()
 
   // Open sidebar by default on medium+ screens
   useEffect(() => {
@@ -52,45 +39,28 @@ export default function MapPage() {
       setSidebarOpen(true)
     }
   }, [])
-  const [err, setErr] = useState<string | null>(null)
   // Trigger to force-close InfoWindow on Reset even if opened via marker click
   const [resetTick, setResetTick] = useState<number>(0)
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const t = setTimeout(async () => {
-      try {
-        setIsLoading(true)
-        setErr(null)
-        const params = new URLSearchParams()
-        if (searchQuery) params.set('search', searchQuery)
-        const stato = currentFilter === 'tutti' ? '' : currentFilter
-        if (stato) params.set('stato', stato)
-        const res = await fetch(`/locations/search?${params.toString()}`, {
-          signal: controller.signal,
-          headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        })
-        if (!res.ok) throw new Error('Errore rete: ' + res.status)
-        const json = await res.json()
-        setLocations(json.data ?? json)
-      } catch (e: any) {
-        if (e?.name !== 'AbortError') setErr('Errore durante la ricerca. Riprova.')
-      } finally {
-        setIsLoading(false)
-      }
-    }, 300)
-    return () => {
-      controller.abort()
-      clearTimeout(t)
+  const handleSearch = useCallback(async () => {
+    const searchParams = {
+      search: searchQuery || undefined,
+      stato: currentFilter === 'tutti' ? undefined : (currentFilter as LocationStato),
     }
-  }, [searchQuery, currentFilter])
+    
+    await searchLocations(searchParams)
+  }, [searchQuery, currentFilter, searchLocations])
+
+  useEffect(() => {
+    handleSearch()
+  }, [handleSearch])
 
   return (
     <div className="flex h-dvh w-full flex-col bg-white text-[#111] dark:bg-[#0a0a0a] dark:text-[#EDEDEC]">
       <Head title="JunieMap" />
 
       <TopBar
-        total={initialLocations.length}
+        total={safeInitialLocations.length}
         filtered={locations.length}
         search={searchQuery}
         setSearch={setSearchQuery}
@@ -99,9 +69,11 @@ export default function MapPage() {
         onReset={() => {
           setSearchQuery('')
           setCurrentFilter('tutti')
-          setLocations(initialLocations)
-          setSelected(null)
+          clearDetails()
+          clearError()
           setResetTick((t) => t + 1)
+          // Reset to initial locations by calling search with no params
+          searchLocations({})
         }}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
@@ -110,7 +82,19 @@ export default function MapPage() {
       />
 
       <div className="flex h-full w-full overflow-hidden">
-        <LocationsSidebar open={sidebarOpen} locations={locations} onSelect={(l) => setSelected(l as any)} loading={isLoading} onClose={() => setSidebarOpen(false)} />
+        <LocationsSidebar 
+          open={sidebarOpen} 
+          locations={locations} 
+          onSelect={(id: number) => {
+            // Find the location and set as selected
+            const location = locations.find(l => l.id === id)
+            if (location) {
+              setSelected(location as LocationFull)
+            }
+          }} 
+          loading={isLoading} 
+          onClose={() => setSidebarOpen(false)} 
+        />
         <div className="relative flex-1">
           {props.googleMapsApiKeyMissing ? (
             <div className="flex h-full items-center justify-center p-6 text-center">
@@ -125,11 +109,23 @@ export default function MapPage() {
               </div>
             </div>
           ) : (
-            <GoogleMap apiKey={props.googleMapsApiKey!} points={locations} selected={selected} onSelect={setSelected} resetTick={resetTick} />
+            <GoogleMap 
+              apiKey={props.googleMapsApiKey!} 
+              points={locations} 
+              selected={selected} 
+              onSelect={(id: number) => {
+                // Find the location and set as selected  
+                const location = locations.find(l => l.id === id)
+                if (location) {
+                  setSelected(location as LocationFull)
+                }
+              }} 
+              resetTick={resetTick} 
+            />
           )}
-          {err && (
+          {searchError && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded bg-[#111] px-3 py-2 text-sm text-white shadow dark:bg-white dark:text-black">
-              {err}
+              {searchError}
             </div>
           )}
         </div>
@@ -349,7 +345,9 @@ function GoogleMap(props: { apiKey: string; points: LocationLite[]; selected: Lo
     const targetZoom = Math.min(15, Math.max(mapObj.current.getZoom() ?? 6, 12))
     mapObj.current.setZoom(targetZoom)
     const m = markers.current[props.selected.id]
-    if (m) openInfoWindow(m, props.selected.id)
+    if (m) {
+      openInfoWindow(m, props.selected.id)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.selected])
 
@@ -401,11 +399,15 @@ function GoogleMap(props: { apiKey: string; points: LocationLite[]; selected: Lo
     infoWindowRef.current.close()
     infoWindowRef.current.setContent(`<div class="p-2 text-sm"><div class="mb-1 font-semibold">Caricamento...</div></div>`)
     infoWindowRef.current.open({ map: mapObj.current!, anchor: marker })
+    
+    // Trigger selection for sidebar sync
+    props.onSelect(id)
+    
     try {
       const res = await fetch(`/locations/${id}/details`)
       const json = await res.json()
       const l: LocationFull = (json.data ?? json) as any
-      const statoColor = l.stato === 'attivo' ? COLORS.success : l.stato === 'in_allarme' ? COLORS.danger : COLORS.muted
+      const statoColor = getLocationColor(l.stato as LocationStato)
       const html = `
         <div class="max-w-[320px] text-sm">
           <div class="mb-1 flex items-start justify-between gap-2">
@@ -440,3 +442,4 @@ function escapeHtml(s: string) {
 function escapeAttr(s: string) {
   return escapeHtml(s)
 }
+
